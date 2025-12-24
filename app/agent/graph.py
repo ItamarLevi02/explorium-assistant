@@ -96,86 +96,86 @@ async def create_explorium_langgraph(config: dict):
         temperature=0.7,
         api_key=anthropic_api_key
     )
+    
+    # Define the reasoning node function that processes messages using Claude
+    async def reasoning_node(state: AgentState):
+        """
+        The reasoning node handles the AI's thinking and decision-making.
         
-        # Define the reasoning node function that processes messages using Claude
-        async def reasoning_node(state: AgentState):
-            """
-            The reasoning node handles the AI's thinking and decision-making.
+        This function:
+        1. Binds the available tools to the language model
+        2. Sends the current conversation state to Claude
+        3. Returns the model's response with potential tool calls
+        
+        Args:
+            state (AgentState): The current state containing messages history
             
-            This function:
-            1. Binds the available tools to the language model
-            2. Sends the current conversation state to Claude
-            3. Returns the model's response with potential tool calls
-            
-            Args:
-                state (AgentState): The current state containing messages history
-                
-            Returns:
-                dict: Updated state with new AI message
-            """
-            # Bind tools to the model so it can use them
-            bound_model = model.bind_tools(tools)
-            system_prompt = SystemMessage(content=EXPLORIUM_SYSTEM_PROMPT)
-            
-            # Add a small delay to prevent rate limiting
-            await asyncio.sleep(2)  # Rate limiting protection
-            
-            try:
-                # Invoke the model with the current state
-                response = cast(
-                    AIMessage,
-                    await bound_model.ainvoke(
-                        [system_prompt, *state.messages],
-                        config={
-                            "max_retries": 2,
-                            "timeout": 30,
-                        }
-                    ),
-                )
-                return {"messages": [response]}
-            except Exception as e:
-                # --- Add specific error logging --- 
-                print(f"--- ERROR in reasoning_node calling Anthropic model: {type(e).__name__}: {e}")
-                # --- End specific error logging ---
-                # Handle errors gracefully
-                return {
-                    "messages": [
-                        AIMessage(
-                            content="I'm currently experiencing some rate limiting. Please try again in a moment."
-                        )
-                    ]
-                }
-
-        # Create the graph structure
-        graph_builder = StateGraph(AgentState)
+        Returns:
+            dict: Updated state with new AI message
+        """
+        # Bind tools to the model so it can use them
+        bound_model = model.bind_tools(tools)
+        system_prompt = SystemMessage(content=EXPLORIUM_SYSTEM_PROMPT)
         
-        # Add nodes to the graph
-        graph_builder.add_node("reasoning_node", reasoning_node)  # AI reasoning
-        graph_builder.add_node("tools", ToolNode(tools))          # Tool execution
-        
-        # Connect the nodes with edges to define the workflow
-        graph_builder.add_edge(START, "reasoning_node")  # Start with reasoning
-        
-        # Conditionally route based on whether the model wants to use tools
-        graph_builder.add_conditional_edges(
-            "reasoning_node",           # From the reasoning node
-            tools_condition,            # Check if tools are needed
-            {"tools": "tools", END: END}  # If tools are needed, go to tools node, else end
-        )
-        
-        # After tool execution, return to reasoning
-        graph_builder.add_edge("tools", "reasoning_node")
-        
-        # Compile the graph to make it executable
-        graph = graph_builder.compile()
+        # Add a small delay to prevent rate limiting
+        await asyncio.sleep(2)  # Rate limiting protection
         
         try:
-            # Yield the compiled graph to the caller
-            yield graph
-        finally:
-            # Clean up the MCP client when done
-            # Note: Check if client has a close/cleanup method if needed
-            if hasattr(client, 'close'):
-                await client.close()
-            elif hasattr(client, 'cleanup'):
-                await client.cleanup() 
+            # Invoke the model with the current state
+            response = cast(
+                AIMessage,
+                await bound_model.ainvoke(
+                    [system_prompt, *state.messages],
+                    config={
+                        "max_retries": 2,
+                        "timeout": 30,
+                    }
+                ),
+            )
+            return {"messages": [response]}
+        except Exception as e:
+            # --- Add specific error logging --- 
+            print(f"--- ERROR in reasoning_node calling Anthropic model: {type(e).__name__}: {e}")
+            # --- End specific error logging ---
+            # Handle errors gracefully
+            return {
+                "messages": [
+                    AIMessage(
+                        content="I'm currently experiencing some rate limiting. Please try again in a moment."
+                    )
+                ]
+            }
+
+    # Create the graph structure
+    graph_builder = StateGraph(AgentState)
+    
+    # Add nodes to the graph
+    graph_builder.add_node("reasoning_node", reasoning_node)  # AI reasoning
+    graph_builder.add_node("tools", ToolNode(tools))          # Tool execution
+    
+    # Connect the nodes with edges to define the workflow
+    graph_builder.add_edge(START, "reasoning_node")  # Start with reasoning
+    
+    # Conditionally route based on whether the model wants to use tools
+    graph_builder.add_conditional_edges(
+        "reasoning_node",           # From the reasoning node
+        tools_condition,            # Check if tools are needed
+        {"tools": "tools", END: END}  # If tools are needed, go to tools node, else end
+    )
+    
+    # After tool execution, return to reasoning
+    graph_builder.add_edge("tools", "reasoning_node")
+    
+    # Compile the graph to make it executable
+    graph = graph_builder.compile()
+    
+    try:
+        # Yield the compiled graph to the caller
+        yield graph
+    finally:
+        # Clean up the MCP client when done
+        # Note: Check if client has a close/cleanup method if needed
+        if hasattr(client, 'close'):
+            await client.close()
+        elif hasattr(client, 'cleanup'):
+            await client.cleanup() 
