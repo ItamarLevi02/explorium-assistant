@@ -135,18 +135,8 @@ async def send_standard_llm_response(user_input: str, websocket, manager):
     final_content = ""
     try:
         # Load environment variables
-        # #region debug log
-        import json
-        with open('/Users/itamar.levi/Desktop/Projects/Project_1/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1","location":"standard_agent.py:138","message":"Before load_dotenv in send_standard","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
         load_dotenv()
         anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-        # #region debug log
-        anthropic_key_stripped = anthropic_api_key.strip() if anthropic_api_key else None
-        with open('/Users/itamar.levi/Desktop/Projects/Project_1/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1,H2,H3,H4","location":"standard_agent.py:141","message":"API key retrieved in send_standard","data":{"key_exists":anthropic_api_key is not None,"key_length":len(anthropic_api_key) if anthropic_api_key else 0,"has_whitespace":anthropic_api_key != anthropic_key_stripped if anthropic_api_key else False},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
         
         if not anthropic_api_key:
             raise ValueError("ANTHROPIC_API_KEY not found in environment variables.")
@@ -155,20 +145,12 @@ async def send_standard_llm_response(user_input: str, websocket, manager):
         anthropic_api_key = anthropic_api_key.strip()
         
         # Use the same model as the streaming version for consistency
-        # #region debug log
-        with open('/Users/itamar.levi/Desktop/Projects/Project_1/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H4","location":"standard_agent.py:147","message":"Before ChatAnthropic init in send_standard","data":{"api_key_provided":anthropic_api_key is not None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
         llm = ChatAnthropic(
             model='claude-3-haiku-20240307', 
             temperature=0.7, 
             streaming=False,
             api_key=anthropic_api_key
         ) # Ensure streaming=False
-        # #region debug log
-        with open('/Users/itamar.levi/Desktop/Projects/Project_1/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H4","location":"standard_agent.py:152","message":"After ChatAnthropic init in send_standard","data":{"model_created":llm is not None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
         
         # Construct the formatted prompt content directly
         # (Using the same prompt as the streaming version, including length constraint)
@@ -205,11 +187,6 @@ async def send_standard_llm_response(user_input: str, websocket, manager):
                 
     except Exception as e:
         # Log the error and prepare the error message
-        # #region debug log
-        import json
-        with open('/Users/itamar.levi/Desktop/Projects/Project_1/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H2,H4","location":"standard_agent.py:186","message":"Error in send_standard_llm_response","data":{"error_type":type(e).__name__,"error_message":str(e)},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
         error_content = f"Error in Standard Agent Generation: {type(e).__name__} - {str(e)}"
         print(error_content) # Log to server console
         # Prepare and send the error message

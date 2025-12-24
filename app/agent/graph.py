@@ -35,26 +35,13 @@ async def create_explorium_langgraph(config: dict):
     6. Compile and return the graph
     """
     # Load .env file
-    # #region debug log
-    import json
-    with open('/Users/itamar.levi/Desktop/Projects/Project_1/.cursor/debug.log', 'a') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1","location":"graph.py:38","message":"Before load_dotenv","data":{"env_file_exists":os.path.exists('.env'),"cwd":os.getcwd()},"timestamp":int(__import__('time').time()*1000)})+'\n')
-    # #endregion
     load_dotenv()
-    # #region debug log
-    with open('/Users/itamar.levi/Desktop/Projects/Project_1/.cursor/debug.log', 'a') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1","location":"graph.py:40","message":"After load_dotenv","data":{},"timestamp":int(__import__('time').time()*1000)})+'\n')
-    # #endregion
     print("Starting to create LangGraph...")
     
     # Get API keys from environment
     explorium_api_key = os.getenv("EXPLORIUM_API_KEY")
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-    # #region debug log
-    anthropic_key_stripped = anthropic_api_key.strip() if anthropic_api_key else None
-    with open('/Users/itamar.levi/Desktop/Projects/Project_1/.cursor/debug.log', 'a') as f:
-        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H1,H2,H3,H4","location":"graph.py:45","message":"API keys retrieved","data":{"explorium_key_exists":explorium_api_key is not None,"explorium_key_length":len(explorium_api_key) if explorium_api_key else 0,"anthropic_key_exists":anthropic_api_key is not None,"anthropic_key_length":len(anthropic_api_key) if anthropic_api_key else 0,"anthropic_key_has_whitespace":anthropic_api_key != anthropic_key_stripped if anthropic_api_key else False,"anthropic_key_prefix":anthropic_api_key[:10] if anthropic_api_key and len(anthropic_api_key) > 10 else None,"anthropic_key_suffix":anthropic_api_key[-10:] if anthropic_api_key and len(anthropic_api_key) > 10 else None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-    # #endregion
+    
     # Strip whitespace from API key if present
     if anthropic_api_key:
         anthropic_api_key = anthropic_api_key.strip()
@@ -99,19 +86,11 @@ async def create_explorium_langgraph(config: dict):
         
         # Initialize the Claude language model with explicit API key
         # According to LangGraph documentation, passing api_key explicitly is recommended
-        # #region debug log
-        with open('/Users/itamar.levi/Desktop/Projects/Project_1/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H4","location":"graph.py:88","message":"Before ChatAnthropic init","data":{"api_key_provided":anthropic_api_key is not None,"api_key_length":len(anthropic_api_key) if anthropic_api_key else 0},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
         model = ChatAnthropic(
             model="claude-3-7-sonnet-20250219",
             temperature=0.7,
             api_key=anthropic_api_key
         )
-        # #region debug log
-        with open('/Users/itamar.levi/Desktop/Projects/Project_1/.cursor/debug.log', 'a') as f:
-            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H4","location":"graph.py:92","message":"After ChatAnthropic init","data":{"model_created":model is not None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-        # #endregion
         
         # Load all available tools from the MCP server
         tools = client.get_tools()
@@ -155,10 +134,6 @@ async def create_explorium_langgraph(config: dict):
                 return {"messages": [response]}
             except Exception as e:
                 # --- Add specific error logging --- 
-                # #region debug log
-                with open('/Users/itamar.levi/Desktop/Projects/Project_1/.cursor/debug.log', 'a') as f:
-                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"H2,H4","location":"graph.py:131","message":"Error in reasoning_node","data":{"error_type":type(e).__name__,"error_message":str(e),"api_key_was_provided":anthropic_api_key is not None},"timestamp":int(__import__('time').time()*1000)})+'\n')
-                # #endregion
                 print(f"--- ERROR in reasoning_node calling Anthropic model: {type(e).__name__}: {e}")
                 # --- End specific error logging ---
                 # Handle errors gracefully
