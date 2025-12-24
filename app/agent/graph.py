@@ -55,10 +55,43 @@ async def create_explorium_langgraph(config: dict):
     uv_path = os.getenv("UV_PATH")
     working_dir = os.getenv("MCP_WORKING_DIR")
 
-    if not uv_path:
-        raise ValueError("UV_PATH not found in environment variables. Please check your .env file.")
+    # Try to find uv automatically if UV_PATH is not set or doesn't exist
+    if not uv_path or not os.path.exists(uv_path):
+        # Try common locations where uv might be installed
+        import shutil
+        uv_path = shutil.which("uv")  # Try to find uv in PATH
+        if not uv_path:
+            # Try common installation paths
+            common_paths = [
+                "/root/.cargo/bin/uv",  # Railway/Render after curl install
+                "/usr/local/bin/uv",
+                "/usr/bin/uv",
+                os.path.expanduser("~/.cargo/bin/uv"),
+            ]
+            for path in common_paths:
+                if os.path.exists(path):
+                    uv_path = path
+                    break
+        
+        if not uv_path:
+            raise ValueError(
+                "UV_PATH not found. Please either:\n"
+                "1. Set UV_PATH environment variable to the path where uv is installed\n"
+                "2. Install uv during build: curl -LsSf https://astral.sh/uv/install.sh | sh\n"
+                "3. Add uv to your PATH"
+            )
+        else:
+            print(f"Found uv at: {uv_path}")
+
     if not working_dir:
         raise ValueError("MCP_WORKING_DIR not found in environment variables. Please check your .env file.")
+    
+    # Verify working_dir exists
+    if not os.path.exists(working_dir):
+        raise ValueError(f"MCP_WORKING_DIR path does not exist: {working_dir}")
+    
+    print(f"Using UV_PATH: {uv_path}")
+    print(f"Using MCP_WORKING_DIR: {working_dir}")
     # --- End get paths ---
     
     # Initialize the MCP client that connects to the Explorium tool server
