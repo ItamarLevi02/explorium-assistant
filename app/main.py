@@ -75,8 +75,17 @@ async def get():
     Returns:
         The contents of index.html
     """
-    with open("app/static/index.html") as f:
-        return f.read()
+    try:
+        with open("app/static/index.html") as f:
+            return f.read()
+    except Exception as e:
+        print(f"Error serving index.html: {e}")
+        return HTMLResponse(content=f"<h1>Error loading page</h1><p>{str(e)}</p>", status_code=500)
+
+@app.get("/health")
+async def health():
+    """Health check endpoint to verify the app is running."""
+    return {"status": "ok", "message": "Application is running"}
 
 # --- Define Helper Coroutine for MCP that SENDS final email AND intermediate steps ---
 async def run_mcp_and_send_final(state: AgentState, graph_instance, websocket, manager):
