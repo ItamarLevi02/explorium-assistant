@@ -1,0 +1,3 @@
+"""
+Explorium Assistant package
+""" 

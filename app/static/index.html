@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explorium Sales Email Assistant</title>
+    <!-- Make sure this path is correct based on your server setup -->
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <!-- Use app-container for overall layout -->
+    <div class="app-container">
+        <h1>Outbound Email MCP</h1>
+        <!-- Removed tagline based on screenshot -->
+        <!-- <p class="tagline">Powered by Explorium's External Data & LangGraph</p> -->
+
+        <!-- Container for the two panels -->
+        <div class="comparison-container">
+            <!-- Panel 1: MCP Agent -->
+            <div class="chat-panel" id="mcp-panel">
+                <div class="panel-header mcp-header">
+                    <h2>AI + Explorium Data</h2>
+                </div>
+                <div class="chat-messages" id="mcp-messages">
+                    <!-- MCP Messages Appear Here -->
+                    <div id="mcp-typing-indicator" class="typing-indicator">Thinking...</div>
+                </div>
+            </div>
+
+            <!-- Panel 2: Standard Agent (Initially Hidden by CSS) -->
+             <div class="chat-panel" id="standard-panel">
+                <div class="panel-header standard-header">
+                     <h2>Generic AI Email</h2>
+                </div>
+                <div class="chat-messages" id="standard-messages">
+                    <!-- Standard Agent Messages Appear Here -->
+                    <div id="standard-typing-indicator" class="typing-indicator">Thinking...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Shared User Messages Area -->
+        <div id="user-messages-area">
+            <!-- User messages will be added here -->
+        </div>
+
+        <!-- Original Input Area Structure -->
+        <div class="input-area">
+             <!-- Original input and button -->
+            <input type="text" id="messageInput" placeholder="Type your message...">
+            <button id="sendButton">Send</button>
+        </div>
+    </div>
+
+    <!-- Modal Structure for Agent Steps -->
+    <div id="stepsModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-btn" onclick="hideStepsModal()">&times;</button>
+            <h2>Agent Steps</h2>
+            <div id="modalStepsContent" class="modal-steps-area">
+                <!-- Steps will be loaded here -->
+            </div>
+        </div>
+    </div>
+    <!-- End Modal Structure -->
+
+    <script>
+        // --- DOM References ---
+        const appContainer = document.querySelector('.app-container');
+        const comparisonContainer = document.querySelector('.comparison-container');
+        const mcpMessagesContainer = document.getElementById('mcp-messages');
+        const standardMessagesContainer = document.getElementById('standard-messages');
+        const mcpTypingIndicator = document.getElementById('mcp-typing-indicator');
+        const standardTypingIndicator = document.getElementById('standard-typing-indicator');
+        const messageInput = document.getElementById('messageInput'); // Now input type="text"
+        const sendButton = document.getElementById('sendButton');
+
+        const styleElement = document.createElement('style');
+        styleElement.textContent = `
+        
+            /* Element that will be revealed character by character */
+            .typing-reveal {
+                position: relative;
+                display: inline-block;
+                width: 100%;
+            }
+            
+            /* Hidden original content - fully formatted but invisible */
+            .typing-content {
+                visibility: hidden;
+                white-space: pre-wrap;
+            }
+            
+            /* Visible overlay that will be animated to reveal the content */
+            .typing-overlay {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: white;
+                transform-origin: left;
+            }
+            
+            /* Animation for typing effect */
+            @keyframes typewriter {
+                from { transform: scaleX(1); }
+                to { transform: scaleX(0); }
+            }
+            
+            /* Animation for highlight pulse */
+            @keyframes highlight-pulse {
+                0% { background-color: #9193FE; }
+                100% { background-color: #9193FE; }
+            }
+        `;
+        document.head.appendChild(styleElement);
+
+        // --- Helper function to check for MCP data ---
+        function containsMCPTags(text) {
+            if (typeof text !== 'string') return false;
+            return text.includes('<<<mcp_data>>>');
+        }
+        
+        // --- Helper function to apply MCP highlighting ---
+        function applyMcpHighlighting(text) {
+            if (typeof text !== 'string') return text;
+            
+            const regex = /<<<mcp_data>>>(.*?)<<<end_mcp_data>>>/gs;
+            let highlightCounter = 0;
+
+            // Use a replacer function to cycle through colors
+            return text.replace(regex, (match, group1) => {
+                const colorIndex = highlightCounter % 3;
+                highlightCounter++;
+                // Add base class and cycled color class
+                return `<span class="mcp-highlight mcp-color-${colorIndex + 1}">${group1}</span>`;
+            });
+        }
+
+        // --- State ---
+        let ws = null;
+        let isSplitActive = false;
+
+        // --- RESTORED: State for animation frame typing effect --- 
+        let mcpTypingState = { element: null, targetText: "", position: 0, isTyping: false, panelId: 'mcp', hasMcpData: false };
+        let standardTypingState = { element: null, targetText: "", position: 0, isTyping: false, panelId: 'standard' };
+        let animationFrameId = null;
+        // let isTypingLoopRunning = false; // This flag might not be needed with requestAnimationFrame
+
+        // --- RESTORED: Core Animation Step Function ---
+        function typeAnimationStep() {
+            let mcpProgress = false;
+            let standardProgress = false;
+
+            // Process MCP typing
+            if (mcpTypingState.isTyping && mcpTypingState.element) {
+                if (mcpTypingState.position < mcpTypingState.targetText.length) {
+                    // --- Apply highlighting progressively ---
+                    mcpTypingState.position++; // Increment position first
+                    const partialText = mcpTypingState.targetText.substring(0, mcpTypingState.position);
+
+                    if (mcpTypingState.hasMcpData) {
+                        // Apply highlighting to the currently typed part
+                        const highlightedPartialHTML = applyMcpHighlighting(partialText);
+                        mcpTypingState.element.innerHTML = highlightedPartialHTML;
+                    } else {
+                        // Just display plain text if no tags were ever detected
+                        mcpTypingState.element.innerHTML = partialText;
+                    }
+                    // --- End progressive highlighting ---
+                    mcpProgress = true;
+                } else {
+                    // --- REMOVED Post-typing highlighting application ---
+                    // Typing is complete, no need to apply highlighting again here
+                    mcpTypingState.isTyping = false; // Finished
+                    console.log("--- MCP Typing Animation Complete ---");
+                    displayStepsButtonIfNeeded(); // Display button now
+                }
+            }
+
+            // Process Standard typing (no changes needed here)
+            if (standardTypingState.isTyping && standardTypingState.element) {
+                if (standardTypingState.position < standardTypingState.targetText.length) {
+                    standardTypingState.position++; // Increment position
+                    const partialText = standardTypingState.targetText.substring(0, standardTypingState.position);
+                    standardTypingState.element.innerHTML = partialText; // Set innerHTML directly
+                    standardProgress = true;
+                } else {
+                    standardTypingState.isTyping = false; // Finished
+                    console.log("--- Standard Typing Animation Complete ---");
+                }
+            }
+
+            // Keep animating if either is still typing
+            if (mcpProgress || standardProgress) {
+                animationFrameId = requestAnimationFrame(typeAnimationStep);
+            } else {
+                 if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                 animationFrameId = null;
+                 console.log("--- All Typing Animations Finished ---");
+            }
+        }
+
+        // --- RESTORED: Function to initiate typing animation for a panel ---
+        function startTypingAnimation(content, targetPanelId) {
+            console.log(`--- Starting typing animation for: ${targetPanelId}`);
+            let container = null;
+            let state = null;
+
+            if (targetPanelId === 'mcp') {
+                container = mcpMessagesContainer;
+                state = mcpTypingState;
+            } else if (targetPanelId === 'standard') {
+                container = standardMessagesContainer;
+                state = standardTypingState;
+            } else {
+                console.error(`[startTypingAnimation] Invalid targetPanelId: ${targetPanelId}`);
+                return;
+            }
+
+            if (!container) {
+                console.error(`[startTypingAnimation] Target container ('${targetPanelId}') not found!`);
+                return;
+            }
+
+            // Clear previous content in the target container 
+            container.innerHTML = '';
+
+            // Create the message element
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ai-message'; 
+            container.appendChild(messageDiv);
+
+            // Prepare target text (flag MCP data, don't pre-highlight)
+            let textToType = content;
+            state.hasMcpData = false; 
+            if (targetPanelId === 'mcp') {
+                // --- NEW: Handle receiving structured data object --- 
+                if (typeof content === 'object' && content !== null && content.body) {
+                    console.log("[startTypingAnimation] Received structured MCP data. Formatting for display.");
+                    // Format the object into a display string
+                    // Ensure body keeps potential <<<mcp_data>>> tags
+                    textToType = `Potential Contacts:\n${content.potential_contacts || 'N/A'}\n\nSubject: ${content.subject || 'N/A'}\n\nBody:\n${content.body}`;
+                    
+                    // Check the formatted body for highlighting tags
+                    if (containsMCPTags(content.body)) {
+                         console.log("[startTypingAnimation] MCP body has tags, flagging for post-animation highlighting.");
+                        state.hasMcpData = true;
+                    }
+                } else if (typeof content === 'string') { 
+                    // Fallback if we somehow still receive a string
+                     console.warn("[startTypingAnimation] Received string for MCP panel, expected object. Using as is.");
+                     textToType = content;
+                     if (containsMCPTags(textToType)) {
+                        state.hasMcpData = true;
+                    }
+                } else {
+                    // Handle unexpected content format
+                     console.error("[startTypingAnimation] Received unexpected content format for MCP panel:", content);
+                     textToType = "Error: Unexpected content format received for MCP agent.";
+                }
+                // --- END Handle structured data ---
+            } else { // For standard panel, content should still be a string
+                 textToType = (typeof content === 'string') ? content : JSON.stringify(content);
+                 state.hasMcpData = false; // Standard panel never has MCP data
+            }
+            
+            // Configure state for animation
+            state.element = messageDiv; // Store ref to the message div
+            state.targetText = textToType; // Store original text
+            state.position = 0;
+            state.isTyping = true;
+            messageDiv.innerHTML = ''; // Start visually empty
+
+            // Start the animation loop if not already running
+            if (!animationFrameId) {
+                console.log("--- Kicking off animation frame loop ---");
+                animationFrameId = requestAnimationFrame(typeAnimationStep);
+            }
+        }
+
+        // --- WebSocket Event Handlers ---
+        // State variables to hold final results
+        let mcpFinalEmail = null;
+        let standardFinalEmail = null;
+        // --- Store received intermediate steps --- 
+        let mcpStepsData = null; 
+
+        function connectWebSocket() {
+            ws = new WebSocket("ws://" + location.host + "/ws");
+
+            ws.onopen = function(event) {
+                console.log("WebSocket connection established");
+                clearErrors();
+                resetToSinglePanel(); // Reset view on new connection
+            };
+
+            ws.onmessage = function(event) {
+                console.log("--- [WebSocket Received] Raw Data:", event.data); 
+                let message;
+                try {
+                    message = JSON.parse(event.data);
+                    console.log("--- [WebSocket Received] Parsed Message:", message);
+                } catch (e) {
+                    console.error("Failed to parse WebSocket message:", e);
+                    return; // Ignore non-JSON messages
+                }
+
+                // Stop relevant typing indicators if they exist
+                // (We might not have typing indicators in this flow, but good practice)
+                // stopTypingIndicator(mcpTypingState);
+                // stopTypingIndicator(standardTypingState);
+
+                if (message.type === 'mcp_final_email') {
+                    console.log("--- [WebSocket Received] MCP Final Email Received.");
+                    mcpFinalEmail = message.content; // Store the MCP email object
+                    checkAndDisplayFinalEmails();     // Check if both are ready
+                
+                } else if (message.type === 'standard_final_email') {
+                    console.log("--- [WebSocket Received] Standard Final Email Received.");
+                    standardFinalEmail = message.content; // Store the standard email string
+                    checkAndDisplayFinalEmails();          // Check if both are ready
+                
+                } else if (message.type === 'error') {
+                    console.error("--- [WebSocket Received] Error message:", message.content, "Source:", message.source);
+                    const errorSource = message.source || 'system';
+                    const errorTargetPanel = (errorSource === 'mcp') ? 'mcp' : 'standard'; 
+                    // Use displayFinalMessage for simplicity, it just adds a div
+                    displayFinalMessage(`Error (${errorSource}): ${message.content}`, errorTargetPanel);
+                
+                } else if (message.type === 'mcp_intermediate_steps') {
+                    console.log("--- [WebSocket Received] MCP Intermediate Steps Received. Storing...");
+                    // Store steps instead of displaying immediately
+                    if (message.steps && Array.isArray(message.steps)) {
+                        mcpStepsData = message.steps;
+                    } else {
+                        console.warn("Received mcp_intermediate_steps but steps array is missing or invalid.");
+                        mcpStepsData = null; // Ensure it's null if data is bad
+                    }
+                    // Check if MCP typing is already done, if so, display button now
+                    if (!mcpTypingState.isTyping && mcpTypingState.element) {
+                        displayStepsButtonIfNeeded();
+                    }
+                }
+                // Implicitly ignore other message types
+            };
+
+            ws.onerror = function(event) {
+                console.error("WebSocket error:", event);
+                addMessage(mcpMessagesContainer, 'error', 'WebSocket error occurred. Please refresh.');
+                mcpTypingIndicator.style.display = 'none';
+                standardTypingIndicator.style.display = 'none';
+            };
+
+            ws.onclose = function(event) {
+                console.log("WebSocket connection closed", event.reason);
+                addMessage(mcpMessagesContainer, 'error', 'WebSocket connection closed. Please refresh.');
+                // Reset state on close
+                mcpFinalEmail = null;
+                standardFinalEmail = null;
+                mcpTypingIndicator.style.display = 'none';
+                standardTypingIndicator.style.display = 'none';
+            };
+        }
+        
+        // --- New function to check and display final results ---
+        function checkAndDisplayFinalEmails() {
+             console.log("--- Checking if both emails received: MCP=", !!mcpFinalEmail, " Standard=", !!standardFinalEmail);
+             if (mcpFinalEmail !== null && standardFinalEmail !== null) {
+                 console.log("--- Both final emails received! Activating split and starting typing animations.");
+                 
+                 hideProcessingIndicator();
+                 
+                 activateSplit(); // Activate the split view CSS
+                 
+                 // --- Use startTypingAnimation --- 
+                 startTypingAnimation(mcpFinalEmail, 'mcp'); 
+                 startTypingAnimation(standardFinalEmail, 'standard');
+                 // --- End Use startTypingAnimation ---
+                 
+                 // Reset state for the next request
+                 console.log("--- Resetting final email state variables.");
+                 mcpFinalEmail = null;
+                 standardFinalEmail = null;
+             } else {
+                 console.log("--- Still waiting for one or both emails.");
+             }
+        }
+
+        // --- NEW: Dedicated function for displaying FINAL emails ---
+        function displayFinalMessage(content, targetPanelId) {
+            console.log(`--- [displayFinalMessage] Displaying final message for: ${targetPanelId}`);
+            let container = null;
+            if (targetPanelId === 'mcp') {
+                container = mcpMessagesContainer;
+            } else if (targetPanelId === 'standard') {
+                container = standardMessagesContainer;
+            } else {
+                console.error(`[displayFinalMessage] Invalid targetPanelId: ${targetPanelId}`);
+                return;
+            }
+
+            if (!container) {
+                console.error(`[displayFinalMessage] Target container ('${targetPanelId}') not found!`);
+                return;
+            }
+
+            // --- >>> Clear container before adding final message <<< ---
+            container.innerHTML = ''; 
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ai-message'; // Simple AI message style
+
+            let finalContent = content; // Content is expected to be a string now
+
+            // Apply highlighting only for MCP panel content
+            if (targetPanelId === 'mcp') {
+                console.log("[displayFinalMessage] Checking MCP content for highlighting.");
+                if (containsMCPTags(finalContent)) {
+                     console.log("[displayFinalMessage] Applying MCP highlighting.");
+                     finalContent = applyMcpHighlighting(finalContent);
+                } else {
+                     console.log("[displayFinalMessage] No MCP tags found in final MCP content.");
+                }
+            }
+
+            messageDiv.innerHTML = finalContent; // Use innerHTML to render potential spans
+
+            // Append and scroll
+             container.appendChild(messageDiv);
+             container.scrollTop = container.scrollHeight;
+             console.log(`--- [displayFinalMessage] Appended final message to ${targetPanelId} panel.`);
+        }
+
+        // --- Add missing stopTypingIndicator function ---
+        function stopTypingIndicator(typingState) {
+            if (typingState.isTyping && typingState.element) {
+                console.log("--- Stopping Typing Indicator for panel associated with:", typingState.element.parentElement.id);
+                // Immediately set the final text content/HTML
+                // Apply final formatting/highlighting based on the state
+                if (typingState.element.dataset.originalType === 'ai_with_tool' && typingState.element.dataset.originalContent) {
+                    try {
+                        const originalContent = JSON.parse(typingState.element.dataset.originalContent);
+                        const toolTextHTML = originalContent.tool_name ? ` (using tool: <strong>${originalContent.tool_name}</strong>)` : '';
+                        const finalHTML = `${originalContent.prefix || 'AI is thinking:'} ${originalContent.main_text || ''}${toolTextHTML} ${originalContent.suffix || ''}`;
+                        typingState.element.innerHTML = finalHTML;
+                    } catch (e) {
+                         console.error("Error parsing originalContent in stopTypingIndicator:", e);
+                         typingState.element.textContent = typingState.targetText; // Fallback
+                    }
+                } else if (typingState.hasMcpData) { // Check specific state for MCP
+                     const fullText = typingState.targetText;
+                     const highlightedText = applyMcpHighlighting(fullText);
+                     typingState.element.innerHTML = highlightedText;
+                } else {
+                    // For standard or non-highlighted MCP, just set the final text
+                    typingState.element.textContent = typingState.targetText;
+                }
+
+                // Clear the dataset attributes if they were used
+                delete typingState.element.dataset.originalType;
+                delete typingState.element.dataset.originalContent;
+
+                 // Reset the state object
+                 typingState.isTyping = false;
+                 typingState.element = null;
+                 typingState.position = 0;
+                 typingState.targetText = ""; // Clear target text
+                 typingState.buffer = []; // Clear buffer just in case
+                 if ('hasMcpData' in typingState) { // Check if MCP state
+                     typingState.hasMcpData = false;
+                 }
+            }
+            // Also hide the static "Thinking..." indicator if it exists for that panel
+            // This is distinct from the animated typing message element
+            if (typingState === mcpTypingState && mcpTypingIndicator) {
+                 mcpTypingIndicator.style.display = 'none';
+            } else if (typingState === standardTypingState && standardTypingIndicator) {
+                 standardTypingIndicator.style.display = 'none';
+            }
+        }
+
+        // --- Sending Messages ---
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            console.log("--- Resetting to Single Panel State ---");
+            resetToSinglePanel(); // Ensure single panel view before sending
+
+            // Display user message immediately in the shared area
+            // addUserMessage(message);
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                // Construct the JSON message object
+                const messageData = { message: message };
+                // Send the JSON string
+                console.log("--- [WebSocket Sending]:", JSON.stringify(messageData)); // Log outgoing message
+                ws.send(JSON.stringify(messageData));
+                messageInput.value = ''; // Clear input field
+
+                // --- Show processing indicator --- 
+                showProcessingIndicator("Generating emails..."); 
+                // ----------------------------------
+
+            } else {
+                console.error('WebSocket is not connected.');
+                addMessage(mcpMessagesContainer, 'error', 'WebSocket connection lost. Please refresh.');
+            }
+        }
+        
+        // --- Activate Split Function --- 
+        function activateSplit() {
+            console.log("--- Running activateSplit() --- "); 
+            appContainer.classList.add('active-split');
+            console.log("--- Added 'active-split' class to appContainer ---");
+            
+            // --- >>> Make comparison container visible <<< ---
+            if (comparisonContainer) {
+                comparisonContainer.style.display = 'flex'; 
+                console.log("--- Set comparisonContainer display to flex ---");
+            } else {
+                console.error("--- activateSplit: comparisonContainer not found! ---");
+            }
+            // --- End make container visible ---
+        }
+
+        // --- Function to reset view --- 
+        function resetToSinglePanel() {
+            console.log("--- Resetting to Single Panel State ---");
+            isSplitActive = false;
+            appContainer.classList.remove('active-split');
+            // Hide the container 
+            if (comparisonContainer) comparisonContainer.style.display = 'none'; 
+            // Clear content
+            if(standardMessagesContainer) standardMessagesContainer.innerHTML = '';
+            if(mcpMessagesContainer) mcpMessagesContainer.innerHTML = '';
+            hideProcessingIndicator();
+        }
+        
+        // --- Processing Indicator Functions --- 
+        function showProcessingIndicator(text = "Processing...") {
+            let indicator = document.getElementById('processing-indicator');
+            if (!indicator) {
+                indicator = document.createElement('div');
+                indicator.id = 'processing-indicator';
+                indicator.className = 'processing-indicator'; // Add class for styling
+                // Insert after h1 or somewhere appropriate
+                appContainer.insertBefore(indicator, comparisonContainer);
+            }
+            indicator.textContent = text;
+            indicator.style.display = 'block';
+        }
+
+        function hideProcessingIndicator() {
+             let indicator = document.getElementById('processing-indicator');
+             if (indicator) indicator.style.display = 'none';
+        }
+        
+        // --- Error Area Function --- 
+        function createErrorArea() {
+            let area = document.createElement('div');
+            area.id = 'error-area';
+            area.className = 'error-message'; // Reuse error message style
+            area.style.display = 'none';
+            area.style.marginTop = '15px';
+            area.style.marginBottom = '15px';
+            appContainer.insertBefore(area, comparisonContainer);
+            return area;
+        }
+        function clearErrors() {
+             let area = document.getElementById('error-area');
+             if (area) area.style.display = 'none';
+        }
+
+        // --- Adding Messages to UI ---
+        function addMessage(type, content, targetPanelId) {
+            let container = null;
+            if (targetPanelId === 'mcp') {
+                container = mcpMessagesContainer;
+            } else if (targetPanelId === 'standard') {
+                container = standardMessagesContainer;
+            } else {
+                console.error(`Invalid targetPanelId provided to addMessage: ${targetPanelId}. Defaulting to MCP.`);
+                container = mcpMessagesContainer; // Default to MCP panel if ID is wrong
+            }
+            
+            // --- NEW: Check if container exists before proceeding --- 
+             if (!container) {
+                 console.error(`Target message container ('${targetPanelId}') not found or is null! Cannot add message.`);
+                 // Optionally, display error in a generic place?
+                 // const errorArea = document.getElementById('error-area') || createErrorArea();
+                 // errorArea.textContent = `Error displaying message: Target panel '${targetPanelId}' not found.`;
+                 // errorArea.style.display = 'block';
+                 return; // Stop execution for this message
+             }
+             
+             // Find the typing indicator within the *validated* container
+             const indicator = container.querySelector('.typing-indicator'); 
+             const insertBeforeElement = indicator || null; 
+             
+             // --- Add log for standard panel target ---
+             if (targetPanelId === 'standard') {
+                 console.log(`--- [addMessage] Attempting to add to STANDARD panel. Container found: ${!!container}`);
+             }
+             // --- End log ---
+
+             let targetState = (container.id === 'mcp-messages') ? mcpTypingState : standardTypingState;
+
+             if (type === 'ai' || type === 'ai_with_tool') {
+                let textChunk = "";
+                const originalContent = content; 
+                
+                // Check for final draft structure
+                let isFinalDraft = false;
+                let finalDraftData = null;
+                
+                if (container.id === 'mcp-messages' && type === 'ai') {
+                    try {
+                        if (typeof originalContent === 'string' && originalContent.trim().startsWith('{')) {
+                            const parsed = JSON.parse(originalContent);
+                            // Check if this looks like a final draft
+                            if (parsed && typeof parsed === 'object' && 
+                                ((parsed.recipients || parsed.potential_contacts) && 
+                                (parsed.subject || parsed.email_subject) && 
+                                (parsed.body || parsed.email_body))) {
+                                isFinalDraft = true;
+                                finalDraftData = parsed;
+                                console.log("Detected final draft in MCP agent output");
+                            }
+                        }
+                    } catch (e) {
+                        console.log("Not a final draft JSON:", e);
+                    }
+                }
+                
+                // Handle final draft specially
+                if (isFinalDraft && finalDraftData) {
+                    console.log("Handling final draft with data:", finalDraftData);
+                    // Create special final draft message block
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = 'message final-draft-message';
+                    
+                    let finalHTML = '';
+                    const contacts = finalDraftData.recipients || finalDraftData.potential_contacts || [];
+                    const subject = finalDraftData.subject || finalDraftData.email_subject || '';
+                    let body = finalDraftData.body || finalDraftData.email_body || '';
+                    
+                    // Check if we have any MCP data before applying highlighting
+                    console.log("Email draft body before highlighting:", body);
+                    
+                    // Handle MCP data tags in body - first check if they exist
+                    if (typeof body === 'string') {
+                        const hasMCPData = containsMCPTags(body);
+                        console.log("Email draft has MCP data:", hasMCPData);
+                        
+                        if (hasMCPData) {
+                            // Apply highlighting
+                            body = applyMcpHighlighting(body);
+                        }
+                    }
+                    
+                    // Format contacts
+                    if (contacts && Array.isArray(contacts) && contacts.length > 0) {
+                        const contactsPre = document.createElement('pre');
+                        const contactsCode = document.createElement('code');
+                        contactsCode.textContent = contacts.map(p => 
+                            `- ${p.name || 'N/A'} (${p.title || 'N/A'}${p.email ? ' - ' + p.email : ''})`
+                        ).join('\n');
+                        contactsPre.appendChild(contactsCode);
+                        finalHTML += `<strong>Potential Contacts:</strong>${contactsPre.outerHTML}`;
+                    }
+                    
+                    // Add subject and body
+                    finalHTML += `<strong>Subject:</strong> ${subject}<br><br>`;
+                    const bodyDivContainer = document.createElement('div');
+                    const bodyLabel = document.createElement('strong');
+                    bodyLabel.textContent = 'Body: ';
+                    const bodyContentDiv = document.createElement('div');
+                    bodyContentDiv.innerHTML = body; // Use innerHTML to render HTML spans
+                    bodyDivContainer.appendChild(bodyLabel);
+                    bodyDivContainer.appendChild(bodyContentDiv);
+                    finalHTML += bodyDivContainer.outerHTML;
+                    
+                    // Add blurb
+                    const blurbDiv = document.createElement('div');
+                    blurbDiv.classList.add('final-draft-blurb');
+                    blurbDiv.innerHTML = `<i>AI is thinking: Based on my research, I'll now draft a personalized email to these decision-makers at ${finalDraftData.company_name || 'the company'}.</i>`;
+                    
+                    messageDiv.innerHTML = blurbDiv.outerHTML + finalHTML;
+                    container.insertBefore(messageDiv, insertBeforeElement);
+                    container.scrollTop = container.scrollHeight;
+                    return;
+                }
+                
+                // Regular AI message processing
+                if (type === 'ai') {
+                    textChunk = String(originalContent);
+                    
+                    // Check if we need to apply MCP highlighting (for regular messages)
+                    if (container.id === 'mcp-messages') {
+                        // Look for potential MCP data tags
+                        if (typeof textChunk === 'string' && 
+                            (textChunk.includes('<<<mcp_data>>>') || 
+                             textChunk.includes('mcp_data'))) {
+                             
+                            console.log("Detected MCP data in message");
+                            
+                            // Simply flag that this message contains MCP data
+                            // We'll apply highlighting after typing is complete
+                            targetState.hasMcpData = true;
+                        }
+                    }
+                } else { // type === 'ai_with_tool'
+                    const toolText = originalContent.tool_name ? ` (using tool: ${originalContent.tool_name})` : ''; 
+                    textChunk = `${originalContent.prefix || 'AI is thinking:'} ${originalContent.main_text || ''}${toolText} ${originalContent.suffix || ''}`;
+                }
+
+                if (!targetState.isTyping) {
+                    const messageDiv = document.createElement('div'); 
+                    messageDiv.className = 'message ai-message'; 
+                    messageDiv.textContent = ''; // Start visually empty
+                    messageDiv.dataset.originalType = type; 
+                    if(type === 'ai_with_tool'){
+                        messageDiv.dataset.originalContent = JSON.stringify(originalContent); 
+                    }
+                    
+                    container.insertBefore(messageDiv, insertBeforeElement);
+                    targetState.element = messageDiv; // Store element ref
+                    targetState.targetText = textChunk; // Set initial target text
+                    targetState.isTyping = true; // Mark as typing
+                    container.scrollTop = container.scrollHeight; // Scroll down once
+                } else {
+                    targetState.targetText += textChunk;
+                }
+                
+                if (!isTypingLoopRunning) {
+                    isTypingLoopRunning = true;
+                    requestAnimationFrame(typingLoop);
+                }
+                
+            } else {
+                 // --- Handle Non-AI Messages (User, Tool, Error, etc.) --- 
+                 if (targetState.isTyping) {
+                     targetState.buffer.push({ type, content });
+                 } else {
+                     const messageDiv = document.createElement('div');
+                     messageDiv.className = 'message'; // Base class
+                     let hideMessage = false; 
+
+                     if (type === 'user') {
+                         messageDiv.classList.add('user-message');
+                         messageDiv.textContent = String(content);
+                     } else if (type === 'tool') {
+                          const button = document.createElement('button');
+                          button.className = 'collapsible';
+                          button.innerHTML = 'View result from tool <span class="arrow">▶</span>';
+                          const contentDiv = document.createElement('div');
+                          contentDiv.className = 'content';
+                          contentDiv.appendChild(formatToolContent(content)); 
+                          button.onclick = function() {
+                              this.classList.toggle('active');
+                              const contentElement = this.nextElementSibling;
+                              const arrow = this.querySelector('.arrow');
+                              if (contentElement.style.display === 'block') {
+                                  contentElement.style.display = 'none';
+                                  arrow.classList.remove('active');
+                              } else {
+                                  contentElement.style.display = 'block';
+                                  arrow.classList.add('active');
+                              }
+                          };
+                          messageDiv.appendChild(button);
+                          messageDiv.appendChild(contentDiv);
+                     } else if (type === 'error') {
+                         messageDiv.classList.add('error-message');
+                         clearErrors(); 
+                         messageDiv.textContent = String(content);
+                     } else { // Handle final_draft, processing_complete, or unknown
+                          if (type === 'processing_complete'){
+                               hideMessage = true; 
+                          } else {
+                              messageDiv.classList.add(`${type || 'unknown'}-message`); 
+                              messageDiv.textContent = String(content);
+                          }
+                     }
+
+                     // Insert the message ONLY if it shouldn't be hidden
+                     if (!hideMessage) { 
+                         container.insertBefore(messageDiv, insertBeforeElement);
+                         container.scrollTop = container.scrollHeight; 
+                     }
+                 }
+            }
+       }
+
+        // --- Formatting Tool Content (Returns PRE > CODE tag consistent with original CSS) ---
+         function formatToolContent(content) {
+            const pre = document.createElement('pre');
+             const code = document.createElement('code');
+            try {
+                // Check if content is already an object (from backend potentially)
+                // Or if it's a string that needs parsing
+                let parsedContent = (typeof content === 'string') ? JSON.parse(content) : content;
+                code.textContent = JSON.stringify(parsedContent, null, 2); // Pretty print JSON
+            } catch (e) {
+                code.textContent = String(content); // Display as plain text if not JSON
+            }
+             pre.appendChild(code);
+            return pre; // Return the <pre> element containing <code>
+        }
+
+        // --- Event Listeners ---
+        sendButton.addEventListener('click', sendMessage);
+        // Use original ID 'messageInput' which is now input type="text"
+        messageInput.addEventListener('keypress', function(e) {
+            // Send on Enter for input type="text"
+            if (e.key === 'Enter') {
+                // e.preventDefault(); // Not needed for input type="text"
+                sendMessage();
+            }
+        });
+
+        // --- Initial Setup ---
+        messageInput.focus();
+        connectWebSocket();
+
+        // --- Animation Frame Typing Loop --- 
+        function typingLoop() {
+            let workDoneThisFrame = false;
+
+            // Process MCP Panel
+            if (mcpTypingState.isTyping && mcpTypingState.element) {
+                // Check if we're still typing
+                if (mcpTypingState.position < mcpTypingState.targetText.length) {
+                    // Increment position
+                    mcpTypingState.position++;
+                    
+                    // Get the partial text up to current position
+                    const partialText = mcpTypingState.targetText.substring(0, mcpTypingState.position);
+                    
+                    // REAL-TIME HIGHLIGHTING: Apply MCP highlighting during typing
+                    // This will replace COMPLETE tag pairs only, leaving partial tags as plain text
+                    if (mcpTypingState.hasMcpData) {
+                        const tagPairRegex = /<<<mcp_data>>>(.*?)<<<end_mcp_data>>>/g;
+                        const hasCompletePair = tagPairRegex.test(partialText);
+                        
+                        if (hasCompletePair) {
+                            // We have at least one complete pair, we can safely apply highlighting
+                            const highlightedText = partialText.replace(tagPairRegex, '<span class="mcp-highlight">$1</span>');
+                            mcpTypingState.element.innerHTML = highlightedText;
+                        } else {
+                            // No complete pairs yet, just show raw text
+                            mcpTypingState.element.textContent = partialText;
+                        }
+                    } else {
+                        // Regular message without MCP data
+                        mcpTypingState.element.textContent = partialText;
+                    }
+                    
+                    mcpMessagesContainer.scrollTop = mcpMessagesContainer.scrollHeight;
+                    workDoneThisFrame = true;
+                } else {
+                    // Typing complete - apply highlighting now if needed
+                    if (mcpTypingState.hasMcpData && mcpTypingState.element) {
+                        console.log("--- MCP Typing finished, applying final highlighting ---");
+                        const finalText = mcpTypingState.targetText; // Get the original full text
+                        const highlightedHTML = applyMcpHighlighting(finalText);
+                        mcpTypingState.element.innerHTML = highlightedHTML; // Apply final HTML
+                    }
+                    // Reset state
+                    mcpTypingState.isTyping = false;
+                    mcpTypingState.element = null;
+                    mcpTypingState.hasMcpData = false;
+                    mcpTypingState.position = 0;
+                }
+            } else if (!mcpTypingState.isTyping && mcpTypingState.buffer.length > 0) {
+                const bufferedMsg = mcpTypingState.buffer.shift();
+                addMessage(mcpMessagesContainer, bufferedMsg.type, bufferedMsg.content);
+                workDoneThisFrame = true; 
+            }
+            
+            // Process Standard Panel (similar logic but without MCP highlighting)
+            if (standardTypingState.isTyping && standardTypingState.element) {
+                // Use position counter instead of element length
+                if (standardTypingState.position < standardTypingState.targetText.length) {
+                    // Increment position
+                    standardTypingState.position++;
+                    
+                    // Update displayed text
+                    const partialText = standardTypingState.targetText.substring(0, standardTypingState.position);
+                    standardTypingState.element.textContent = partialText;
+                    
+                    standardMessagesContainer.scrollTop = standardMessagesContainer.scrollHeight; 
+                    workDoneThisFrame = true;
+                } else {
+                    // Done typing
+                    standardTypingState.isTyping = false;
+                    standardTypingState.element = null;
+                    standardTypingState.position = 0;
+                }
+            } else if (!standardTypingState.isTyping && standardTypingState.buffer.length > 0) {
+                const bufferedMsg = standardTypingState.buffer.shift(); 
+                addMessage(standardMessagesContainer, bufferedMsg.type, bufferedMsg.content); 
+                workDoneThisFrame = true; 
+            }
+
+            if (workDoneThisFrame) {
+                requestAnimationFrame(typingLoop);
+            } else {
+                isTypingLoopRunning = false;
+                mcpTypingState.targetText = ""; 
+                standardTypingState.targetText = "";
+            }
+        }
+
+        // --- Define missing addUserMessage function ---
+        function addUserMessage(messageText) {
+            const userMessagesArea = document.getElementById('user-messages-area');
+            if (!userMessagesArea) {
+                console.error("Cannot find #user-messages-area element!");
+                return;
+            }
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message user-message'; // Use existing CSS class
+            messageDiv.textContent = messageText;
+            userMessagesArea.appendChild(messageDiv);
+            // Scroll to the bottom of the user message area
+            userMessagesArea.scrollTop = userMessagesArea.scrollHeight;
+        }
+
+        // --- Function to add the 'View Steps' button if steps are stored ---
+        function displayStepsButtonIfNeeded() {
+             // Check if MCP typing is done AND we have stored steps AND button isn't already there
+             if (!mcpTypingState.isTyping && mcpTypingState.element && mcpStepsData && !mcpMessagesContainer.querySelector('.view-steps-btn')) {
+                 console.log("--- Adding 'View Agent Steps' button --- ");
+                 const button = document.createElement('button');
+                 button.textContent = "View Agent Steps";
+                 button.className = 'view-steps-btn'; // Add class for styling/selection
+                 
+                 // Insert after the message div (mcpTypingState.element)
+                 mcpTypingState.element.parentNode.insertBefore(button, mcpTypingState.element.nextSibling);
+                 
+                 button.onclick = () => {
+                     console.log("--- 'View Agent Steps' button clicked ---");
+                     // --- Call function to show modal instead of inline display --- 
+                     if (mcpStepsData) {
+                         showStepsModal();
+                     } else {
+                          console.error("No steps data available to show in modal.");
+                          // Optionally disable or hide button if data somehow disappears?
+                     }
+                     // --- End call show modal ---
+                 };
+             }
+        }
+
+        // --- NEW: Function to show the steps modal ---
+        function showStepsModal() {
+            const modalOverlay = document.getElementById('stepsModal');
+            const modalContentArea = document.getElementById('modalStepsContent');
+
+            if (!modalOverlay || !modalContentArea) {
+                console.error("Modal elements not found!");
+                return;
+            }
+
+            // Clear previous content
+            modalContentArea.innerHTML = ''; 
+
+            // Populate modal content
+            if (!mcpStepsData || mcpStepsData.length === 0) {
+                modalContentArea.innerHTML = "<p><i>No intermediate steps were recorded.</i></p>";
+            } else {
+                mcpStepsData.forEach(step => {
+                    const stepDiv = document.createElement('div');
+                    stepDiv.innerHTML = formatStepToHTML(step); // Reuse formatting helper
+                    modalContentArea.appendChild(stepDiv);
+                });
+            }
+
+            // Show the modal
+            modalOverlay.classList.add('modal-visible');
+
+            // Add event listener to close modal when clicking overlay
+            modalOverlay.addEventListener('click', closeModalOnClickOutside);
+            console.log("Modal shown.");
+        }
+
+        // --- NEW: Function to hide the steps modal ---
+        function hideStepsModal() {
+             const modalOverlay = document.getElementById('stepsModal');
+             if (modalOverlay) {
+                 modalOverlay.classList.remove('modal-visible');
+                 // Remove event listener to prevent memory leaks
+                 modalOverlay.removeEventListener('click', closeModalOnClickOutside);
+                 console.log("Modal hidden.");
+             }
+        }
+
+        // --- NEW: Helper to close modal only if overlay (not content) is clicked ---
+        function closeModalOnClickOutside(event) {
+            // Check if the click target is the overlay itself
+            if (event.target.id === 'stepsModal') { 
+                hideStepsModal();
+            }
+        }
+
+        // --- Helper function to format a single step to HTML ---
+        function formatStepToHTML(step) {
+             let htmlContent = '';
+             switch(step.step_type) {
+                 case 'ai_tool_call':
+                     htmlContent = `<div class="intermediate-step tool-call"><strong>Tool Call:</strong> ${step.tool_name || 'N/A'}<br>Args: <pre><code>${JSON.stringify(step.tool_args || {}, null, 2)}</code></pre></div>`;
+                     break;
+                 case 'tool_result':
+                     let result_content = step.content;
+                     try {
+                         const parsed = JSON.parse(result_content);
+                         result_content = JSON.stringify(parsed, null, 2);
+                     } catch (e) { /* Keep as string */ }
+                     htmlContent = `<div class="intermediate-step tool-result">
+                                     <details>
+                                         <summary><strong>Tool Result:</strong> ${step.tool_name || 'N/A'} (click to view)</summary>
+                                         <pre><code>${result_content}</code></pre>
+                                     </details>
+                                  </div>`;
+                     break;
+                 case 'ai_thought':
+                     let thought_content = step.content;
+                     if (Array.isArray(thought_content)) { 
+                         thought_content = thought_content.map(item => (typeof item === 'object' && item.type === 'text') ? item.text : JSON.stringify(item)).join('\n');
+                     } else if (typeof thought_content !== 'string') {
+                         thought_content = JSON.stringify(thought_content);
+                     }
+                     // Simple display for thoughts
+                     htmlContent = `<div class="intermediate-step ai-thought"><strong>Thinking:</strong><div style="white-space: pre-wrap;">${thought_content}</div></div>`;
+                     break;
+                 default:
+                     htmlContent = `<div class="intermediate-step unknown"><strong>Unknown Step:</strong> <pre><code>${JSON.stringify(step, null, 2)}</code></pre></div>`;
+             }
+             return htmlContent;
+        }
+
+    </script>
+</body>
+</html>
+
+
+
+
+

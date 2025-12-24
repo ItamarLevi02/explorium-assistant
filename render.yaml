@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: explorium-assistant
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: EXPLORIUM_API_KEY
+        sync: false
+      - key: UV_PATH
+        value: /usr/local/bin/uv
+      - key: MCP_WORKING_DIR
+        value: /opt/render/project/src/mcp-explorium
+        # Note: This path assumes your repo root is at /opt/render/project/src/
+        # Adjust if your Render setup uses a different base path
+
