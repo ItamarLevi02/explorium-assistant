@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 # The standard agent provides a direct comparison to the MCP agent
 # It uses a single-step LLM call rather than a multi-step LangGraph workflow
