@@ -1,10 +1,8 @@
 [phases.setup]
-nixPkgs = ["python311", "curl", "pip"]
+nixPkgs = ["python311", "curl"]
 
 [phases.install]
 cmds = [
-  "pip install --upgrade pip",
-  "pip install -r requirements.txt",
   "curl -LsSf https://astral.sh/uv/install.sh | sh"
 ]
 
@@ -13,4 +11,7 @@ cmds = []
 
 [start]
 cmd = "python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+
+# Nixpacks will auto-detect requirements.txt and install dependencies
+# We only need to add uv installation in the install phase
 
