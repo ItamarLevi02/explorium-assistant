@@ -1,11 +1,11 @@
 [phases.setup]
-nixPkgs = ["python311", "curl"]
+nixPkgs = ["python311", "curl", "pip"]
 
 [phases.install]
 cmds = [
+  "pip install -r requirements.txt",
   "curl -LsSf https://astral.sh/uv/install.sh | sh",
-  "export PATH=\"$HOME/.cargo/bin:$PATH\"",
-  "pip install -r requirements.txt"
+  "export PATH=\"$HOME/.cargo/bin:$PATH\""
 ]
 
 [phases.build]
