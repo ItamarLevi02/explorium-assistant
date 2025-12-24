@@ -62,8 +62,9 @@ async def create_explorium_langgraph(config: dict):
     # --- End get paths ---
     
     # Initialize the MCP client that connects to the Explorium tool server
-    # This uses a subprocess to run the MCP server locally
-    async with MultiServerMCPClient({
+    # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient cannot be used as a context manager
+    # Use the new API: create client and await get_tools()
+    client = MultiServerMCPClient({
         "explorium": {
             "transport": "stdio",  # Communication via standard input/output
             "command": uv_path,    # Path to the UV package runner
@@ -81,20 +82,20 @@ async def create_explorium_langgraph(config: dict):
                 "EXPLORIUM_API_KEY": explorium_api_key
             },
         }
-    }) as client:
-        print("MCP client initialized...")
-        
-        # Initialize the Claude language model with explicit API key
-        # According to LangGraph documentation, passing api_key explicitly is recommended
-        model = ChatAnthropic(
-            model="claude-3-7-sonnet-20250219",
-            temperature=0.7,
-            api_key=anthropic_api_key
-        )
-        
-        # Load all available tools from the MCP server
-        tools = client.get_tools()
-        print(f"Loaded {len(tools) if tools else 0} tools")
+    })
+    print("MCP client initialized...")
+    
+    # Load all available tools from the MCP server (await is required in 0.1.0+)
+    tools = await client.get_tools()
+    print(f"Loaded {len(tools) if tools else 0} tools")
+    
+    # Initialize the Claude language model with explicit API key
+    # According to LangGraph documentation, passing api_key explicitly is recommended
+    model = ChatAnthropic(
+        model="claude-3-7-sonnet-20250219",
+        temperature=0.7,
+        api_key=anthropic_api_key
+    )
         
         # Define the reasoning node function that processes messages using Claude
         async def reasoning_node(state: AgentState):
@@ -168,5 +169,13 @@ async def create_explorium_langgraph(config: dict):
         # Compile the graph to make it executable
         graph = graph_builder.compile()
         
-        # Yield the compiled graph to the caller
-        yield graph 
+        try:
+            # Yield the compiled graph to the caller
+            yield graph
+        finally:
+            # Clean up the MCP client when done
+            # Note: Check if client has a close/cleanup method if needed
+            if hasattr(client, 'close'):
+                await client.close()
+            elif hasattr(client, 'cleanup'):
+                await client.cleanup() 
