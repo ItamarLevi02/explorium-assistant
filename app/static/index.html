@@ -288,7 +288,9 @@
         let mcpStepsData = null; 
 
         function connectWebSocket() {
-            ws = new WebSocket("ws://" + location.host + "/ws");
+            // Use wss:// for HTTPS (production) or ws:// for HTTP (local development)
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(protocol + "//" + location.host + "/ws");
 
             ws.onopen = function(event) {
                 console.log("WebSocket connection established");
