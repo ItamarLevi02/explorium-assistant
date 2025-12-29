@@ -83,12 +83,31 @@ async def create_explorium_langgraph(config: dict):
         else:
             print(f"Found uv at: {uv_path}")
 
-    if not working_dir:
-        raise ValueError("MCP_WORKING_DIR not found in environment variables. Please check your .env file.")
-    
-    # Verify working_dir exists
-    if not os.path.exists(working_dir):
-        raise ValueError(f"MCP_WORKING_DIR path does not exist: {working_dir}")
+    # Try to auto-detect MCP_WORKING_DIR if not set or doesn't exist
+    if not working_dir or not os.path.exists(working_dir):
+        # Try common locations where mcp-explorium might be
+        current_dir = os.getcwd()
+        common_paths = [
+            os.path.join(current_dir, "mcp-explorium"),  # Same directory as app
+            os.path.join(current_dir, "..", "mcp-explorium"),  # Parent directory
+            "/app/mcp-explorium",  # Railway default
+            "/opt/render/project/src/mcp-explorium",  # Render default
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "mcp-explorium"),  # Relative to this file
+        ]
+        
+        for path in common_paths:
+            abs_path = os.path.abspath(path)
+            if os.path.exists(abs_path):
+                working_dir = abs_path
+                print(f"Auto-detected MCP_WORKING_DIR: {working_dir}")
+                break
+        
+        if not working_dir or not os.path.exists(working_dir):
+            raise ValueError(
+                f"MCP_WORKING_DIR not found. Tried: {common_paths}\n"
+                "Please set MCP_WORKING_DIR environment variable to the path where mcp-explorium is located.\n"
+                "In Railway, this should be: /app/mcp-explorium"
+            )
     
     print(f"Using UV_PATH: {uv_path}")
     print(f"Using MCP_WORKING_DIR: {working_dir}")
