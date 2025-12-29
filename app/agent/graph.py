@@ -138,8 +138,22 @@ async def create_explorium_langgraph(config: dict):
     print("MCP client initialized...")
     
     # Load all available tools from the MCP server (await is required in 0.1.0+)
-    tools = await client.get_tools()
-    print(f"Loaded {len(tools) if tools else 0} tools")
+    try:
+        print(f"Attempting to load tools from MCP server at {working_dir}/local_dev_server.py...")
+        tools = await client.get_tools()
+        print(f"Loaded {len(tools) if tools else 0} tools")
+        if tools:
+            print(f"Tool names: {[tool.name for tool in tools[:5]]}...")  # Print first 5 tool names
+    except Exception as e:
+        print(f"ERROR loading tools from MCP server: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise ValueError(
+            f"Failed to load tools from MCP server: {e}\n"
+            f"UV_PATH: {uv_path}\n"
+            f"MCP_WORKING_DIR: {working_dir}\n"
+            f"Please check that uv is installed and the MCP server path is correct."
+        ) from e
     
     # Initialize the Claude language model with explicit API key
     # According to LangGraph documentation, passing api_key explicitly is recommended
