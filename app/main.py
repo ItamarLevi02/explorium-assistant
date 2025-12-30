@@ -119,7 +119,6 @@ async def run_mcp_and_send_final(state: AgentState, graph_instance, websocket, m
             raise asyncio.TimeoutError("MCP agent timed out after 5 minutes")
         
         timeout_task = asyncio.create_task(timeout_handler())
-        stream_task = None
         
         try:
             # Start streaming with progress tracking
