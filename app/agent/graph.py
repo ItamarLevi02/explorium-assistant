@@ -118,6 +118,16 @@ async def create_explorium_langgraph(config: dict):
     # Use the new API: create client and await get_tools()
     # According to the MCP server README, the correct command is:
     # uv run --directory <REPOSITORY_PATH> mcp run local_dev_server.py
+    # Note: uv run should automatically install dependencies, but we ensure PATH includes uv
+    import shutil
+    # Ensure uv is in PATH for the subprocess
+    env = os.environ.copy()
+    env["EXPLORIUM_API_KEY"] = explorium_api_key
+    # Add uv's directory to PATH if it's not already there
+    uv_dir = os.path.dirname(uv_path)
+    if uv_dir not in env.get("PATH", ""):
+        env["PATH"] = f"{uv_dir}:{env.get('PATH', '')}"
+    
     client = MultiServerMCPClient({
         "explorium": {
             "transport": "stdio",  # Communication via standard input/output
@@ -130,9 +140,7 @@ async def create_explorium_langgraph(config: dict):
                 "run",
                 "local_dev_server.py"  # Relative to the working directory
             ],
-            "env": {               # Environment variables for the MCP server
-                "EXPLORIUM_API_KEY": explorium_api_key
-            },
+            "env": env,            # Environment variables including PATH
         }
     })
     print("MCP client initialized...")
