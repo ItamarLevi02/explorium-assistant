@@ -1018,10 +1018,23 @@
                      break;
                  case 'tool_result':
                      let result_content = step.content;
-                     try {
-                         const parsed = JSON.parse(result_content);
-                         result_content = JSON.stringify(parsed, null, 2);
-                     } catch (e) { /* Keep as string */ }
+                     // Handle both string and object content
+                     if (typeof result_content === 'string') {
+                         try {
+                             // Try to parse as JSON and pretty-print
+                             const parsed = JSON.parse(result_content);
+                             result_content = JSON.stringify(parsed, null, 2);
+                         } catch (e) {
+                             // If not valid JSON, keep as string
+                             result_content = result_content;
+                         }
+                     } else if (typeof result_content === 'object' && result_content !== null) {
+                         // If it's already an object, stringify it
+                         result_content = JSON.stringify(result_content, null, 2);
+                     } else {
+                         // Fallback to string conversion
+                         result_content = String(result_content);
+                     }
                      htmlContent = `<div class="intermediate-step tool-result">
                                      <details>
                                          <summary><strong>Tool Result:</strong> ${step.tool_name || 'N/A'} (click to view)</summary>

@@ -137,10 +137,19 @@ async def run_mcp_and_send_final(state: AgentState, graph_instance, websocket, m
                                  "content": last_ai_message_content
                              })
                     elif isinstance(latest_msg, ToolMessage):
+                        # Ensure content is JSON-serializable
+                        content = latest_msg.content
+                        if not isinstance(content, str):
+                            # If content is already a dict/list, convert to JSON string
+                            import json
+                            try:
+                                content = json.dumps(content, indent=2, default=str)
+                            except (TypeError, ValueError):
+                                content = str(content)
                         intermediate_steps.append({
                             "step_type": "tool_result",
                             "tool_name": latest_msg.name,
-                            "content": latest_msg.content
+                            "content": content
                         })
             # --- End Collect Intermediate Steps ---
 
