@@ -164,7 +164,6 @@ async def run_mcp_and_send_final(state: AgentState, graph_instance, websocket, m
                     elif isinstance(latest_msg, ToolMessage):
                         # Ensure content is JSON-serializable
                         content = latest_msg.content
-                        original_content = content
                         if not isinstance(content, str):
                             # If content is already a dict/list, convert to JSON string
                             try:
@@ -184,20 +183,9 @@ async def run_mcp_and_send_final(state: AgentState, graph_instance, websocket, m
                             "content": display_content
                         })
                         
-                        # Truncate the actual message content that goes to the model to prevent context overflow
-                        # Keep only essential data - truncate to 2000 chars per tool result
-                        max_model_length = 2000
-                        if len(content) > max_model_length:
-                            # Create a truncated version for the model
-                            truncated_content = content[:max_model_length] + f"... (truncated from {len(content)} chars)"
-                            # Replace the message content with truncated version
-                            from langchain_core.messages import ToolMessage
-                            # Create new message with truncated content
-                            event["messages"][-1] = ToolMessage(
-                                content=truncated_content,
-                                name=latest_msg.name,
-                                tool_call_id=latest_msg.tool_call_id if hasattr(latest_msg, 'tool_call_id') else None
-                            )
+                        # Note: We can't modify the event messages here as events are immutable snapshots
+                        # The truncation above is only for display in intermediate steps
+                        # The model will receive the full tool results, but we've reduced max_tokens to prevent overflow
             
             # Cancel timeout if we completed successfully
             timeout_task.cancel()
