@@ -230,6 +230,7 @@ async def create_explorium_langgraph(config: dict):
                     config={
                         "max_retries": 2,
                         "timeout": 30,
+                        "max_tokens": 4096,  # Reduce from default to prevent context overflow
                     }
                 ),
             )

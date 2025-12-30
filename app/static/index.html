@@ -331,6 +331,11 @@
                     // Use displayFinalMessage for simplicity, it just adds a div
                     displayFinalMessage(`Error (${errorSource}): ${message.content}`, errorTargetPanel);
                 
+                } else if (message.type === 'mcp_progress') {
+                    console.log("--- [WebSocket Received] MCP Progress:", message.message);
+                    // Update the processing indicator with progress message
+                    showProcessingIndicator(message.message);
+                
                 } else if (message.type === 'mcp_intermediate_steps') {
                     console.log("--- [WebSocket Received] MCP Intermediate Steps Received. Storing...");
                     // Store steps instead of displaying immediately

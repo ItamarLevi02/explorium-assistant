@@ -162,7 +162,7 @@ async def run_mcp_and_send_final(state: AgentState, graph_instance, websocket, m
                                  "content": last_ai_message_content
                              })
                     elif isinstance(latest_msg, ToolMessage):
-                        # Ensure content is JSON-serializable
+                        # Ensure content is JSON-serializable and truncate to prevent context overflow
                         content = latest_msg.content
                         if not isinstance(content, str):
                             # If content is already a dict/list, convert to JSON string
@@ -170,11 +170,41 @@ async def run_mcp_and_send_final(state: AgentState, graph_instance, websocket, m
                                 content = json.dumps(content, indent=2, default=str)
                             except (TypeError, ValueError):
                                 content = str(content)
+                        
+                        # Truncate tool results to prevent context window overflow
+                        # Keep first 5000 chars for intermediate steps (for display)
+                        # But we'll also truncate what gets sent to the model
+                        max_display_length = 5000
+                        if len(content) > max_display_length:
+                            content = content[:max_display_length] + f"\n... (truncated, original length: {len(latest_msg.content)} chars)"
+                        
                         intermediate_steps.append({
                             "step_type": "tool_result",
                             "tool_name": latest_msg.name,
                             "content": content
                         })
+                        
+                        # Truncate the actual message content that goes to the model to prevent context overflow
+                        # Keep only essential data - truncate to 2000 chars per tool result
+                        max_model_length = 2000
+                        if isinstance(latest_msg.content, str) and len(latest_msg.content) > max_model_length:
+                            # Truncate the content in the message itself
+                            latest_msg.content = latest_msg.content[:max_model_length] + "... (truncated)"
+                        elif not isinstance(latest_msg.content, str):
+                            # If it's a dict/list, convert and truncate
+                            try:
+                                content_str = json.dumps(latest_msg.content, default=str)
+                                if len(content_str) > max_model_length:
+                                    # Create a summary instead of full content
+                                    if isinstance(latest_msg.content, dict):
+                                        # Keep only keys and first 100 chars of values
+                                        summary = {k: (str(v)[:100] + "..." if len(str(v)) > 100 else v) 
+                                                  for k, v in list(latest_msg.content.items())[:10]}  # First 10 items
+                                        latest_msg.content = json.dumps(summary, default=str)
+                                    else:
+                                        latest_msg.content = content_str[:max_model_length] + "... (truncated)"
+                            except:
+                                latest_msg.content = str(latest_msg.content)[:max_model_length] + "... (truncated)"
             
             # Cancel timeout if we completed successfully
             timeout_task.cancel()
