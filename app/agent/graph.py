@@ -116,19 +116,19 @@ async def create_explorium_langgraph(config: dict):
     # Initialize the MCP client that connects to the Explorium tool server
     # As of langchain-mcp-adapters 0.1.0, MultiServerMCPClient cannot be used as a context manager
     # Use the new API: create client and await get_tools()
+    # According to the MCP server README, the correct command is:
+    # uv run --directory <REPOSITORY_PATH> mcp run local_dev_server.py
     client = MultiServerMCPClient({
         "explorium": {
             "transport": "stdio",  # Communication via standard input/output
             "command": uv_path,    # Path to the UV package runner
             "args": [              # Arguments to run the local MCP server
                 "run",
-                "--with",
-                "mcp",
-                "--with",
-                "pydantic",
+                "--directory",
+                working_dir,       # Directory containing the MCP server
                 "mcp",
                 "run",
-                f"{working_dir}/local_dev_server.py"
+                "local_dev_server.py"  # Relative to the working directory
             ],
             "env": {               # Environment variables for the MCP server
                 "EXPLORIUM_API_KEY": explorium_api_key
