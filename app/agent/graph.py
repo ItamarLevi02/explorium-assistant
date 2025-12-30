@@ -111,6 +111,25 @@ async def create_explorium_langgraph(config: dict):
     
     print(f"Using UV_PATH: {uv_path}")
     print(f"Using MCP_WORKING_DIR: {working_dir}")
+    
+    # Verify the MCP server file exists
+    local_dev_server_path = os.path.join(working_dir, "local_dev_server.py")
+    if not os.path.exists(local_dev_server_path):
+        raise ValueError(
+            f"MCP server file not found: {local_dev_server_path}\n"
+            f"Please ensure mcp-explorium is in the correct location."
+        )
+    print(f"Verified MCP server file exists: {local_dev_server_path}")
+    
+    # Verify pyproject.toml exists (needed for uv)
+    pyproject_path = os.path.join(working_dir, "pyproject.toml")
+    if not os.path.exists(pyproject_path):
+        raise ValueError(
+            f"pyproject.toml not found in {working_dir}\n"
+            f"This is required for uv to install dependencies."
+        )
+    print(f"Verified pyproject.toml exists: {pyproject_path}")
+    
     # --- End get paths ---
     
     # Initialize the MCP client that connects to the Explorium tool server
@@ -125,8 +144,14 @@ async def create_explorium_langgraph(config: dict):
     env["EXPLORIUM_API_KEY"] = explorium_api_key
     # Add uv's directory to PATH if it's not already there
     uv_dir = os.path.dirname(uv_path)
-    if uv_dir not in env.get("PATH", ""):
+    if uv_dir and uv_dir not in env.get("PATH", ""):
         env["PATH"] = f"{uv_dir}:{env.get('PATH', '')}"
+    
+    # Log the exact command that will be run for debugging
+    cmd_str = f"{uv_path} run --directory {working_dir} mcp run local_dev_server.py"
+    print(f"Will run MCP server with command: {cmd_str}")
+    print(f"Environment PATH: {env.get('PATH', '')[:200]}...")  # First 200 chars
+    print(f"EXPLORIUM_API_KEY set: {'Yes' if env.get('EXPLORIUM_API_KEY') else 'No'}")
     
     client = MultiServerMCPClient({
         "explorium": {
