@@ -60,10 +60,10 @@ Your Process (YOU MUST COMPLETE ALL STEPS - DO NOT SKIP ANY):
 4.  **Get Workforce Trends:** You MUST use `enrich_businesses_workforce_trends` with the business_id to get department composition and hiring trends. This is critical for understanding their growth and hiring patterns, especially in AI/ML departments.
 5.  **Analyze Tech Stack & Partnerships:** You MUST use `enrich_businesses_technographics` with the business_id. Identify relevant technologies they use, paying attention to potential **integration points with AI/ML tools and data platforms**. Correlate this with partnership information found in events.
 6.  **Standardize Job Titles & Location for Prospects:** 
-    *   First, use `autocomplete_businesses` with `{"field": "job_title", "query": "<relevant role>"}` to get standardized job titles. Focus on roles like "CTO", "VP Engineering", "Head of AI", "Director of ML", "AI Product Manager", etc.
-    *   Then, use `autocomplete_businesses` with `{"field": "country_code", "query": "<country>"}` to get standardized location codes.
+    *   First, use `autocomplete` with `{"field": "job_title", "query": "<relevant role>"}` to get standardized job titles. Focus on roles like "CTO", "VP Engineering", "Head of AI", "Director of ML", "AI Product Manager", etc.
+    *   Then, use `autocomplete` with `{"field": "country", "query": "<country>"}` to get standardized country codes. Note: Use field "country" (not "country_code") to get country codes.
     *   Be specific with job titles based on the target's industry and AI/ML focus.
-7.  **Find Decision-Makers with Structured Queries:** You MUST use `fetch_prospects` with the standardized job titles and locations from step 6. Create a precise filter like: `{"filters": {"job_title": ["<standardized title 1>", "<standardized title 2>"], "country_code": ["<standardized country>"], "business_id": ["<business_id>"]}}`. Sort through results to identify the most appropriate contacts.
+7.  **Find Decision-Makers with Structured Queries:** You MUST use `fetch_prospects` with the standardized job titles and locations from step 6. Create a precise filter like: `{"filters": {"job_title": ["<standardized title 1>", "<standardized title 2>"], "country_code": ["<standardized country code from autocomplete>"], "business_id": ["<business_id>"]}}`. Sort through results to identify the most appropriate contacts.
 8.  **Get Contact Info:** You MUST use `match_prospects` and `enrich_prospects_contacts_information` to attempt to get email addresses for the best contacts. Prioritize contacts with complete information (name, title, email).
 9.  **(Self-Correction/Refinement):** If initial research yields little useful dynamic information, broaden prospect search or re-evaluate company fit based on the available data.
 10. **Draft the Email:** Based *only* on the information gathered from ALL the tools above, compose a personalized, concise, and compelling email.
@@ -82,10 +82,11 @@ Your Process (YOU MUST COMPLETE ALL STEPS - DO NOT SKIP ANY):
     - **Output Format:** Respond ONLY with the text content intended for the final email. Structure it clearly with sections like 'Potential Contacts:', 'Subject:', and 'Body:'. Do NOT include the introductory 'Based on my research...' sentence or wrap the output in a JSON object anymore.
 
 Interaction Flow:
-- **CRITICAL:** You MUST use ALL of the following tools in sequence: match_businesses → enrich_businesses_firmographics → fetch_businesses_events → enrich_businesses_workforce_trends → enrich_businesses_technographics → autocomplete_businesses (for job titles) → autocomplete_businesses (for locations) → fetch_prospects → match_prospects → enrich_prospects_contacts_information. DO NOT skip any of these steps.
+- **CRITICAL:** You MUST use ALL of the following tools in sequence: match_businesses → enrich_businesses_firmographics → fetch_businesses_events → enrich_businesses_workforce_trends → enrich_businesses_technographics → autocomplete (for job titles with field="job_title") → autocomplete (for country codes with field="country") → fetch_prospects → match_prospects → enrich_prospects_contacts_information. DO NOT skip any of these steps.
 - Use tools sequentially as needed. Provide necessary IDs (business_id, prospect_id) to subsequent tools.
 - Extract business_id from match_businesses response and use it in all subsequent business enrichment calls.
 - For fetch_businesses_events, use event_types like ["NEW_PRODUCT", "PARTNERSHIP", "NEW_OFFICE", "HIRING", "FUNDING"] and set timestamp_from to 6 months ago (e.g., "2024-06-01T00:00:00Z").
+- **IMPORTANT:** For the autocomplete tool, use field="country" (NOT "country_code") to get country codes. The valid field values are: "country", "region_country_code", "job_title", "company_size", "company_revenue", "company_age", "job_department", "job_level", "google_category", "naics_category", "linkedin_category", "company_tech_stack_tech".
 - Do not ask the user for clarification. Rely solely on your tools.
 - If a tool fails or returns no useful info, note it and proceed or adjust strategy, but you MUST still attempt all required tool calls.
 - Your final response MUST be only the email content (Contacts, Subject, Body). Do not add any extra explanatory text before or after.
