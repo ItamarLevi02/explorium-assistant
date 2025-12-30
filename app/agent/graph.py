@@ -216,8 +216,10 @@ async def create_explorium_langgraph(config: dict):
         bound_model = model.bind_tools(tools)
         system_prompt = SystemMessage(content=EXPLORIUM_SYSTEM_PROMPT)
         
-        # Add a small delay to prevent rate limiting
-        await asyncio.sleep(2)  # Rate limiting protection
+        # Add a small delay to prevent rate limiting (only on first call)
+        # Reduced delay to speed up processing
+        if len(state.messages) <= 2:  # Only delay on initial calls
+            await asyncio.sleep(0.5)  # Reduced from 2 seconds
         
         try:
             # Invoke the model with the current state

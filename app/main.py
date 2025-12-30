@@ -111,20 +111,46 @@ async def run_mcp_and_send_final(state: AgentState, graph_instance, websocket, m
 
     try:
         print("--- [MCP Helper] Starting graph stream...")
-        async for event in graph_instance.astream(
-            state,
-            config={"recursion_limit": 50}, # Increase recursion limit
-            stream_mode="values"
-        ):
-            # --- Collect Intermediate Steps ---
-            # Heuristic: Capture tool calls/results and AI messages before the final one
-            # Note: Event structure might vary, adjust keys as needed based on actual LangGraph output
-            if isinstance(event, dict):
-                if "messages" in event:
+        tool_call_count = 0
+        
+        # Create a timeout task
+        async def timeout_handler():
+            await asyncio.sleep(300.0)  # 5 minutes
+            raise asyncio.TimeoutError("MCP agent timed out after 5 minutes")
+        
+        timeout_task = asyncio.create_task(timeout_handler())
+        stream_task = None
+        
+        try:
+            # Start streaming with progress tracking
+            async for event in graph_instance.astream(
+                state,
+                config={"recursion_limit": 50}, # Increase recursion limit
+                stream_mode="values"
+            ):
+                # Check for timeout
+                if timeout_task.done():
+                    raise asyncio.TimeoutError("MCP agent timed out")
+                
+                # Track tool calls and send progress updates
+                if isinstance(event, dict) and "messages" in event:
                     latest_msg = event["messages"][-1]
                     if isinstance(latest_msg, AIMessage):
                         last_ai_message_content = latest_msg.content
                         if latest_msg.tool_calls:
+                            tool_call_count += len(latest_msg.tool_calls)
+                            # Send progress update every 3 tool calls
+                            if tool_call_count % 3 == 0:
+                                try:
+                                    progress_msg = {
+                                        "type": "mcp_progress",
+                                        "message": f"Processing... ({tool_call_count} tool calls so far)"
+                                    }
+                                    await manager.send_message(json.dumps(progress_msg), websocket)
+                                except:
+                                    pass  # Don't fail on progress updates
+                            
+                            # Collect tool call steps
                             for tc in latest_msg.tool_calls:
                                 intermediate_steps.append({
                                     "step_type": "ai_tool_call",
@@ -141,7 +167,6 @@ async def run_mcp_and_send_final(state: AgentState, graph_instance, websocket, m
                         content = latest_msg.content
                         if not isinstance(content, str):
                             # If content is already a dict/list, convert to JSON string
-                            import json
                             try:
                                 content = json.dumps(content, indent=2, default=str)
                             except (TypeError, ValueError):
@@ -151,7 +176,16 @@ async def run_mcp_and_send_final(state: AgentState, graph_instance, websocket, m
                             "tool_name": latest_msg.name,
                             "content": content
                         })
-            # --- End Collect Intermediate Steps ---
+            
+            # Cancel timeout if we completed successfully
+            timeout_task.cancel()
+            
+        except asyncio.TimeoutError:
+            error_content = "MCP agent timed out after 5 minutes. The request may be too complex or the API is slow."
+            print(f"--- [MCP Helper] {error_content}")
+            error_message = {"type": "error", "source": "mcp", "content": error_content}
+            await manager.send_message(json.dumps(error_message), websocket)
+            return  # Exit early on timeout
 
         print("--- [MCP Helper] Graph stream finished.")
 
