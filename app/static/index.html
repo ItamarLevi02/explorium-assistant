@@ -1044,10 +1044,16 @@
                      break;
                  case 'ai_thought':
                      let thought_content = step.content;
-                     if (Array.isArray(thought_content)) { 
+                     // Handle both string and object content
+                     if (typeof thought_content === 'string') {
+                         // Already a string, use as is
+                         thought_content = thought_content;
+                     } else if (Array.isArray(thought_content)) { 
                          thought_content = thought_content.map(item => (typeof item === 'object' && item.type === 'text') ? item.text : JSON.stringify(item)).join('\n');
-                     } else if (typeof thought_content !== 'string') {
-                         thought_content = JSON.stringify(thought_content);
+                     } else if (typeof thought_content === 'object' && thought_content !== null) {
+                         thought_content = JSON.stringify(thought_content, null, 2);
+                     } else {
+                         thought_content = String(thought_content);
                      }
                      // Simple display for thoughts
                      htmlContent = `<div class="intermediate-step ai-thought"><strong>Thinking:</strong><div style="white-space: pre-wrap;">${thought_content}</div></div>`;
