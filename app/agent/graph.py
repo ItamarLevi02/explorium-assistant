@@ -191,7 +191,7 @@ async def create_explorium_langgraph(config: dict):
     # Initialize the Claude language model with explicit API key
     # According to LangGraph documentation, passing api_key explicitly is recommended
     model = ChatAnthropic(
-        model="claude-3-7-sonnet-20250219",
+        model="claude-3-haiku-20240307",
         temperature=0.7,
         api_key=anthropic_api_key
     )
