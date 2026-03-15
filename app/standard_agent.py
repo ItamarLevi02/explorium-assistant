@@ -20,7 +20,7 @@ async def run_standard_agent(user_product_info: str, target_company_name: str) -
         
         # Initialize the Chat Model with explicit API key
         llm = ChatAnthropic(
-            model="claude-3-5-sonnet-20240620",
+            model="claude-3-haiku-20240307",
             temperature=0.7,
             api_key=anthropic_api_key
         )
